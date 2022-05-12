@@ -15,6 +15,23 @@ task("accounts", "Prints the list of accounts", async (taskArgs, hre) => {
   }
 });
 
+const chainIds = {
+  bscMainnet: 56,
+  bscTestnet: 97,
+  ganache: 1337,
+  hardhat: 31337,
+  ethKovan: 42,
+  ethMainnet: 1,
+  ethRopsten: 3,
+};
+
+const {
+  MORALIS_SPEEDY_NODE_KEY, 
+  PRIVATE_KEY, 
+  BSCSCAN_API_KEY, 
+  REPORT_GAS
+} = process.env;
+
 // You need to export an object to set up your config
 // Go to https://hardhat.org/config/ to learn more
 
@@ -22,19 +39,44 @@ task("accounts", "Prints the list of accounts", async (taskArgs, hre) => {
  * @type import('hardhat/config').HardhatUserConfig
  */
 module.exports = {
-  solidity: "0.8.4",
+  solidity: {
+    version: "0.8.4",
+    settings: {
+      optimizer: {
+        enabled: true,
+        runs: 200
+      }
+    }
+  },
   networks: {
-    ropsten: {
-      url: process.env.ROPSTEN_URL || "",
-      accounts:
-        process.env.PRIVATE_KEY !== undefined ? [process.env.PRIVATE_KEY] : [],
+    hardhat: {
+      chainId: chainIds.hardhat,
+      forking: { // mainnet fork
+        enabled: true,
+        url: `https://speedy-nodes-nyc.moralis.io/${MORALIS_SPEEDY_NODE_KEY}/bsc/mainnet`
+      }
     },
+    testnet: {
+      url: "https://data-seed-prebsc-1-s1.binance.org:8545",
+      chainId: chainIds.bscTestnet,
+      gasPrice: 20000000000,
+      accounts: PRIVATE_KEY !== undefined ? [PRIVATE_KEY] : []
+    },
+    mainnet: {
+      url: "https://bsc-dataseed.binance.org/",
+      chainId: chainIds.bscMainnet,
+      gasPrice: 20000000000,
+      accounts: PRIVATE_KEY !== undefined ? [PRIVATE_KEY] : []
+    }
   },
   gasReporter: {
-    enabled: process.env.REPORT_GAS !== undefined,
+    enabled: REPORT_GAS !== undefined,
     currency: "USD",
   },
   etherscan: {
-    apiKey: process.env.ETHERSCAN_API_KEY,
+    apiKey: BSCSCAN_API_KEY,
   },
+  mocha: {
+    timeout: 0
+  }
 };
