@@ -4,6 +4,7 @@ pragma solidity ^0.8.0;
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "./interfaces/IPancakeRouter02.sol";
 import "./interfaces/IPancakePair.sol";
+import "./libraries/Helpers.sol";
 
 interface IWBNB is IERC20 {
     function deposit() external payable;
@@ -55,6 +56,13 @@ contract ZapPancakeswapV2 {
                 }
             }
         }
+    }
+
+    function _getSwapAmount(uint256 investmentA, uint256 reserveA, uint256 reserveB) private view returns (uint256 swapAmount) {
+        uint256 halfInvestment = investmentA / 2;
+        uint256 nominator = router.getAmountOut(halfInvestment, reserveA, reserveB);
+        uint256 denominator = router.quote(halfInvestment, reserveA + halfInvestment, reserveB - nominator);
+        swapAmount = investmentA - (Helpers.sqrt(halfInvestment * halfInvestment * nominator / denominator));
     }
 
     function _approveTokenIfNeeded(address _token, address _spender) private {
