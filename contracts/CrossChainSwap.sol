@@ -21,16 +21,38 @@ contract CrossChainSwap is Ownable {
     }
 
     function addAvailableChainId(uint256 _destinationChainId) external onlyOwner {
-        require(!availableChainIds[_destinationChainId], "CrossChainSwap: destinationChainId already enabled");
+        require(!availableChainIds[_destinationChainId], "destChainId already enabled");
 
         availableChainIds[_destinationChainId] = true;
     }
 
     function removeAvailableChainId(uint256 _destinationChainId) external onlyOwner {
-        require(availableChainIds[_destinationChainId], "CrossChainSwap: destinationChainId not available");
+        require(availableChainIds[_destinationChainId], "destChainId not available");
 
         delete availableChainIds[_destinationChainId];
     }
 
-    // todo: swap function
+    function send(
+        uint256 destinationChainId,
+        bytes calldata destinationAddress,
+        uint256 zetaAmount
+    ) external {
+        require(availableChainIds[destinationChainId], "destinationChainId not available");
+        require(zetaAmount != 0, "zetaAmount should be greater than 0");
+
+        bool success1 = ERC20(zetaToken).increaseAllowance(zetaMpi, zetaAmount);
+        bool success2 = ERC20(zetaToken).transferFrom(msg.sender, address(this), zetaAmount);
+        require((success1 && success2) == true, "error transferring Zeta");
+
+        _zeta.send(
+            ZetaInterfaces.SendInput({
+                destinationChainId: destinationChainId,
+                destinationAddress: destinationAddress,
+                gasLimit: 2500000,
+                message: abi.encode(),
+                zetaAmount: zetaAmount,
+                zetaParams: abi.encode("")
+            })
+        );
+    }
 }
