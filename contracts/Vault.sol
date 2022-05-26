@@ -6,17 +6,25 @@ import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
+import "@openzeppelin/contracts/utils/Address.sol";
 
 import "./libraries/FixedPointMathLib.sol";
+import "./interfaces/IWETH.sol";
 
 contract Vault is ERC20, Ownable, ReentrancyGuard {
-
+    using Address for address payable;
     using FixedPointMathLib for uint256;
     using SafeERC20 for IERC20;
     
-    IERC20 public immutable asset;
+    IERC20 public asset;
 
-    event Deposit(address indexed _caller, address indexed _owner, uint256 _assets, uint256 _shares);
+    event Deposit(address indexed _caller, address indexed _owner, uint256 _amount, uint256 _shares);
+    event Withdraw(
+        address indexed _caller,
+        address indexed _receiver,
+        uint256 _amount,
+        uint256 _shares
+    );
 
     constructor(
         IERC20 _asset,
@@ -26,26 +34,50 @@ contract Vault is ERC20, Ownable, ReentrancyGuard {
         asset = _asset;
     }
 
-    function deposit(uint256 assets, address receiver) public virtual returns (uint256 shares) {
+    function depositETH() external payable returns (uint256) {
+        uint256 amount = msg.value;
+        IWETH(address(asset)).deposit{value: amount}();
+        return deposit(amount, msg.sender);
+    }
+
+    function withdrawETH() external nonReentrant returns (uint256 withdrawn) {
+
+    }
+
+    function deposit(uint256 _amount, address _receiver) public virtual returns (uint256 shares) {
         // Check for rounding error since we round down in previewDeposit.
-        require((shares = previewDeposit(assets)) != 0, "ZERO_SHARES");
+        require((shares = previewDeposit(_amount)) != 0, "ZERO_SHARES");
 
         // Need to transfer before minting or ERC777s could reenter.
-        asset.safeTransferFrom(msg.sender, address(this), assets);
+        asset.safeTransferFrom(msg.sender, address(this), _amount);
 
-        _mint(receiver, shares);
+        _mint(_receiver, shares);
 
-        emit Deposit(msg.sender, receiver, assets, shares);
+        emit Deposit(msg.sender, _receiver, _amount, shares);
 
-        afterDeposit(assets, shares);
+        afterDeposit(_amount, shares);
     }
 
-    function withdraw(uint256 _shares) external nonReentrant {
+    function withdraw(uint256 _amount, address _receiver) external nonReentrant returns (uint256 shares) {
+        shares = previewWithdraw(_amount);
 
+        beforeWithdraw(_amount, shares);
+        
+        _burn(msg.sender, shares);
+
+        emit Withdraw(msg.sender, _receiver, _amount, shares);
+
+        asset.safeTransfer(_receiver, _amount);
     }
 
-    function previewDeposit(uint256 assets) public view returns (uint256) {
-        return convertToShares(assets);
+    function previewDeposit(uint256 _amount) public view returns (uint256) {
+        return convertToShares(_amount);
+    }
+
+    function previewWithdraw(uint256 _amount) public view virtual returns (uint256) {
+        uint256 supply = totalSupply(); // Saves an extra SLOAD if totalSupply is non-zero.
+
+        return supply == 0 ? _amount : _amount.mulDivUp(supply, totalAssets());
     }
 
     function totalAssets() public view returns (uint256) {
@@ -57,5 +89,7 @@ contract Vault is ERC20, Ownable, ReentrancyGuard {
         return supply == 0 ? assets : assets.mulDivDown(supply, totalAssets());
     }
 
-    function afterDeposit(uint256 assets, uint256 shares) internal {}
+    function beforeWithdraw(uint256 _amount, uint256 _shares) internal {}
+
+    function afterDeposit(uint256 _amount, uint256 _shares) internal {}
 }
