@@ -40,8 +40,10 @@ contract Vault is ERC20, Ownable, ReentrancyGuard {
         return deposit(amount, msg.sender);
     }
 
-    function withdrawETH() external nonReentrant returns (uint256 withdrawn) {
-
+    function withdrawETH(uint256 _amount) external nonReentrant returns (uint256 withdrawn) {
+        withdrawn = withdraw(_amount, msg.sender);
+        IWETH(address(asset)).withdraw(withdrawn);
+        payable(msg.sender).sendValue(address(this).balance);
     }
 
     function deposit(uint256 _amount, address _receiver) public virtual returns (uint256 shares) {
@@ -58,7 +60,7 @@ contract Vault is ERC20, Ownable, ReentrancyGuard {
         afterDeposit(_amount, shares);
     }
 
-    function withdraw(uint256 _amount, address _receiver) external nonReentrant returns (uint256 shares) {
+    function withdraw(uint256 _amount, address _receiver) public nonReentrant returns (uint256 shares) {
         shares = previewWithdraw(_amount);
 
         beforeWithdraw(_amount, shares);
