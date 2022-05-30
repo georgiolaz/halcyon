@@ -18,10 +18,9 @@ contract Vault is ERC20, Ownable, ReentrancyGuard {
     
     IERC20 public asset;
 
-    event Deposit(address indexed _caller, address indexed _owner, uint256 _amount, uint256 _shares);
+    event Deposit(address indexed _caller, uint256 _amount, uint256 _shares);
     event Withdraw(
         address indexed _caller,
-        address indexed _receiver,
         uint256 _amount,
         uint256 _shares
     );
@@ -37,58 +36,60 @@ contract Vault is ERC20, Ownable, ReentrancyGuard {
     function depositETH() external payable returns (uint256) {
         uint256 amount = msg.value;
         IWETH(address(asset)).deposit{value: amount}();
-        return deposit(amount, msg.sender);
+        return deposit(amount);
     }
 
-    function withdrawETH(uint256 _amount) external nonReentrant returns (uint256 withdrawn) {
-        withdrawn = withdraw(_amount, msg.sender);
+    function withdrawETH(uint256 _shares) external nonReentrant returns (uint256 withdrawn) {
+        withdrawn = withdraw(_shares);
         IWETH(address(asset)).withdraw(withdrawn);
         payable(msg.sender).sendValue(address(this).balance);
     }
 
-    function deposit(uint256 _amount, address _receiver) public virtual returns (uint256 shares) {
+    function deposit(uint256 _amount) public virtual returns (uint256 shares) {
         // Check for rounding error since we round down in previewDeposit.
         require((shares = previewDeposit(_amount)) != 0, "ZERO_SHARES");
 
         // Need to transfer before minting or ERC777s could reenter.
         asset.safeTransferFrom(msg.sender, address(this), _amount);
 
-        _mint(_receiver, shares);
+        _mint(msg.sender, shares);
 
-        emit Deposit(msg.sender, _receiver, _amount, shares);
+        emit Deposit(msg.sender, _amount, shares);
 
-        afterDeposit(_amount, shares);
+        // afterDeposit(_amount, shares);
     }
 
-    function withdraw(uint256 _amount, address _receiver) public nonReentrant returns (uint256 shares) {
-        shares = previewWithdraw(_amount);
+    function withdraw(uint256 _shares) public nonReentrant returns (uint256 amount) {
+        require((amount = previewWithdraw(_shares)) != 0, "ZERO_ASSETS");
 
-        beforeWithdraw(_amount, shares);
+        // beforeWithdraw(amount, _shares);
         
-        _burn(msg.sender, shares);
+        _burn(msg.sender, _shares);
 
-        emit Withdraw(msg.sender, _receiver, _amount, shares);
+        emit Withdraw(msg.sender, amount, _shares);
 
-        asset.safeTransfer(_receiver, _amount);
+        asset.safeTransfer(msg.sender, amount);
     }
 
     function previewDeposit(uint256 _amount) public view returns (uint256) {
         return convertToShares(_amount);
     }
 
-    function previewWithdraw(uint256 _amount) public view virtual returns (uint256) {
-        uint256 supply = totalSupply(); // Saves an extra SLOAD if totalSupply is non-zero.
-
-        return supply == 0 ? _amount : _amount.mulDivUp(supply, totalAssets());
+    function previewWithdraw(uint256 _shares) public view virtual returns (uint256) {
+        return convertToAssets(_shares);
     }
 
     function totalAssets() public view returns (uint256) {
     }
 
-    function convertToShares(uint256 assets) public view virtual returns (uint256) {
+    function convertToShares(uint256 _amount) public view virtual returns (uint256) {
         uint256 supply = totalSupply(); // Saves an extra SLOAD if totalSupply is non-zero.
+        return supply == 0 ? _amount : _amount.mulDivDown(supply, totalAssets());
+    }
 
-        return supply == 0 ? assets : assets.mulDivDown(supply, totalAssets());
+    function convertToAssets(uint256 _shares) public view virtual returns (uint256) {
+        uint256 supply = totalSupply(); // Saves an extra SLOAD if totalSupply is non-zero.
+        return supply == 0 ? _shares : _shares.mulDivDown(totalAssets(), supply);
     }
 
     function beforeWithdraw(uint256 _amount, uint256 _shares) internal {}
