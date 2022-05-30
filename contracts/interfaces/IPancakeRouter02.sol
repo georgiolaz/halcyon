@@ -2,6 +2,8 @@
 pragma solidity ^0.8.0;
 
 interface IPancakeRouter02 {
+    function factory() external pure returns (address);
+    
     function addLiquidity(
         address tokenA,
         address tokenB,
