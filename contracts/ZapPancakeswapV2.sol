@@ -11,6 +11,7 @@ import "./libraries/FixedPointMathLib.sol";
 
 contract ZapPancakeswapV2 {
     using SafeERC20 for IERC20;
+    using SafeERC20 for IVault;
 
     IPancakeRouter02 public immutable router;
 
@@ -35,6 +36,15 @@ contract ZapPancakeswapV2 {
         IWETH(wBNB).deposit{value: msg.value}();
 
         _swapAndStake(_vault, _tokenAmountOutMin, wBNB);
+    }
+
+    function halcyonIn (address _vault, uint256 _tokenAmountOutMin, address _tokenIn, uint256 _tokenInAmount) external {
+        // require(tokenInAmount >= minimumAmount, "Insignificant input amount");
+        require(IERC20(_tokenIn).allowance(msg.sender, address(this)) >= _tokenInAmount, "Input token is not approved");
+
+        IERC20(_tokenIn).safeTransferFrom(msg.sender, address(this), _tokenInAmount);
+
+        _swapAndStake(_vault, _tokenAmountOutMin, _tokenIn);
     }
 
     //--------------- private functions ----------------//
@@ -71,7 +81,7 @@ contract ZapPancakeswapV2 {
         _approveTokenIfNeeded(address(pair), address(vault));
         vault.deposit(amountLiquidity);
 
-        vault.transfer(msg.sender, vault.balanceOf(address(this)));
+        vault.safeTransfer(msg.sender, vault.balanceOf(address(this)));
         _returnAssets(path);
     }
 
