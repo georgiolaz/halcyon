@@ -4,12 +4,10 @@ pragma solidity ^0.8.0;
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "./interfaces/IPancakeRouter02.sol";
 import "./interfaces/IPancakePair.sol";
-import "./libraries/FixedPointMathLib.sol";
+import "./interfaces/IWETH.sol";
+import "./interfaces/IVault.sol";
 
-interface IWBNB is IERC20 {
-    function deposit() external payable;
-    function withdraw(uint256 wad) external;
-}
+import "./libraries/FixedPointMathLib.sol";
 
 contract ZapPancakeswapV2 {
     using SafeERC20 for IERC20;
@@ -21,8 +19,8 @@ contract ZapPancakeswapV2 {
 
     constructor(address _router, address _wBNB) {
         // Safety checks to ensure WBNB token address
-        IWBNB(_wBNB).deposit{value: 0}();
-        IWBNB(_wBNB).withdraw(0);
+        IWETH(_wBNB).deposit{value: 0}();
+        IWETH(_wBNB).withdraw(0);
 
         router = IPancakeRouter02(_router);
         wBNB = _wBNB;
@@ -32,7 +30,50 @@ contract ZapPancakeswapV2 {
         assert(msg.sender == wBNB);
     }
 
+    function halcyonInETH (address _vault, uint256 _tokenAmountOutMin) external payable {
+
+        IWETH(wBNB).deposit{value: msg.value}();
+
+        _swapAndStake(_vault, _tokenAmountOutMin, wBNB);
+    }
+
     //--------------- private functions ----------------//
+
+    function _swapAndStake(address _vault, uint256 _tokenAmountOutMin, address _tokenIn) private {
+        (IVault vault, IPancakePair pair) = _getVaultPair(_vault);
+
+        (uint256 reserveA, uint256 reserveB,) = pair.getReserves();
+        // require(reserveA > minimumAmount && reserveB > minimumAmount, 'Liquidity pair reserves too low');
+
+        bool isInputA = pair.token0() == _tokenIn;
+        require(isInputA || pair.token1() == _tokenIn, "Input token not present in liquidity pair");
+
+        address[] memory path = new address[](2);
+        path[0] = _tokenIn;
+        path[1] = isInputA ? pair.token1() : pair.token0();
+
+        uint256 fullInvestment = IERC20(_tokenIn).balanceOf(address(this));
+        uint256 swapAmountIn;
+        if (isInputA) {
+            swapAmountIn = _getSwapAmount(fullInvestment, reserveA, reserveB);
+        } else {
+            swapAmountIn = _getSwapAmount(fullInvestment, reserveB, reserveA);
+        }
+
+        _approveTokenIfNeeded(path[0], address(router));
+        uint256[] memory swapedAmounts = router
+            .swapExactTokensForTokens(swapAmountIn, _tokenAmountOutMin, path, address(this), block.timestamp);
+
+        _approveTokenIfNeeded(path[1], address(router));
+        (,, uint256 amountLiquidity) = router
+            .addLiquidity(path[0], path[1], fullInvestment - (swapedAmounts[0]), swapedAmounts[1], 1, 1, address(this), block.timestamp);
+
+        _approveTokenIfNeeded(address(pair), address(vault));
+        vault.deposit(amountLiquidity);
+
+        vault.transfer(msg.sender, vault.balanceOf(address(this)));
+        _returnAssets(path);
+    }
 
     function _removeLiquidity(address _pair, address _to) private {
         IERC20(_pair).safeTransfer(_pair, IERC20(_pair).balanceOf(address(this)));
@@ -42,13 +83,21 @@ contract ZapPancakeswapV2 {
         require(amount1 >= MIN_AMOUNT, "PancakeswapV2Router: INSUFFICIENT_B_AMOUNT");
     }
 
+    function _getVaultPair (address _vault) private view returns (IVault vault, IPancakePair pair) {
+        vault = IVault(_vault);
+        // todo
+        pair = IPancakePair(vault.want());
+
+        require(pair.factory() == router.factory(), "Incompatible liquidity pair factory");
+    }
+
     function _returnAssets(address[] memory tokens) private {
         uint256 balance;
         for (uint256 i; i < tokens.length; i++) {
             balance = IERC20(tokens[i]).balanceOf(address(this));
             if (balance > 0) {
                 if (tokens[i] == wBNB) {
-                    IWBNB(wBNB).withdraw(balance);
+                    IWETH(wBNB).withdraw(balance);
                     (bool success,) = msg.sender.call{value: balance}(new bytes(0));
                     require(success, "BNB transfer failed");
                 } else {
