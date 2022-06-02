@@ -47,6 +47,25 @@ contract ZapPancakeswapV2 {
         _swapAndStake(_vault, _tokenAmountOutMin, _tokenIn);
     }
 
+    function beefOut (address _vault, uint256 _withdrawAmount) external {
+        (IVault vault, IPancakePair pair) = _getVaultPair(_vault);
+
+        IERC20(_vault).safeTransferFrom(msg.sender, address(this), _withdrawAmount);
+        vault.withdraw(_withdrawAmount);
+
+        if (pair.token0() != wBNB && pair.token1() != wBNB) {
+            return _removeLiquidity(address(pair), msg.sender);
+        }
+
+        _removeLiquidity(address(pair), address(this));
+
+        address[] memory tokens = new address[](2);
+        tokens[0] = pair.token0();
+        tokens[1] = pair.token1();
+
+        _returnAssets(tokens);
+    }
+
     //--------------- private functions ----------------//
 
     function _swapAndStake(address _vault, uint256 _tokenAmountOutMin, address _tokenIn) private {
