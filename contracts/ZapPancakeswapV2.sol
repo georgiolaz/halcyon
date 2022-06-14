@@ -38,7 +38,12 @@ contract ZapPancakeswapV2 {
         _swapAndStake(_vault, _tokenAmountOutMin, wBNB);
     }
 
-    function halcyonIn (address _vault, uint256 _tokenAmountOutMin, address _tokenIn, uint256 _tokenInAmount) external {
+    function halcyonIn (
+        address _vault, 
+        uint256 _tokenAmountOutMin, 
+        address _tokenIn, 
+        uint256 _tokenInAmount
+    ) external {
         // require(tokenInAmount >= minimumAmount, "Insignificant input amount");
         require(IERC20(_tokenIn).allowance(msg.sender, address(this)) >= _tokenInAmount, "Input token is not approved");
 
@@ -47,7 +52,7 @@ contract ZapPancakeswapV2 {
         _swapAndStake(_vault, _tokenAmountOutMin, _tokenIn);
     }
 
-    function beefOut (address _vault, uint256 _withdrawAmount) external {
+    function halcyonOut (address _vault, uint256 _withdrawAmount) external {
         (IVault vault, IPancakePair pair) = _getVaultPair(_vault);
 
         IERC20(_vault).safeTransferFrom(msg.sender, address(this), _withdrawAmount);
@@ -136,11 +141,33 @@ contract ZapPancakeswapV2 {
         }
     }
 
-    function _getSwapAmount(uint256 investmentA, uint256 reserveA, uint256 reserveB) private view returns (uint256 swapAmount) {
+    function _getSwapAmount(
+        uint256 investmentA, 
+        uint256 reserveA, 
+        uint256 reserveB
+    ) private view returns (uint256 swapAmount) {
         uint256 halfInvestment = investmentA / 2;
         uint256 nominator = router.getAmountOut(halfInvestment, reserveA, reserveB);
         uint256 denominator = router.quote(halfInvestment, reserveA + halfInvestment, reserveB - nominator);
         swapAmount = investmentA - (FixedPointMathLib.sqrt(halfInvestment * halfInvestment * nominator / denominator));
+    }
+
+    function estimateSwap(
+        address vault, 
+        address tokenIn, 
+        uint256 fullInvestmentIn
+    ) public view returns(uint256 swapAmountIn, uint256 swapAmountOut, address swapTokenOut) {
+        (, IPancakePair pair) = _getVaultPair(vault);
+
+        bool isInputA = pair.token0() == tokenIn;
+        require(isInputA || pair.token1() == tokenIn, "Halcyon: Input token not present in liquidity pair");
+
+        (uint256 reserveA, uint256 reserveB,) = pair.getReserves();
+        (reserveA, reserveB) = isInputA ? (reserveA, reserveB) : (reserveB, reserveA);
+
+        swapAmountIn = _getSwapAmount(fullInvestmentIn, reserveA, reserveB);
+        swapAmountOut = router.getAmountOut(swapAmountIn, reserveA, reserveB);
+        swapTokenOut = isInputA ? pair.token1() : pair.token0();
     }
 
     function _approveTokenIfNeeded(address _token, address _spender) private {
