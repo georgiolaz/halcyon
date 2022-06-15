@@ -119,9 +119,7 @@ contract ZapPancakeswapV2 {
 
     function _getVaultPair (address _vault) private view returns (IVault vault, IPancakePair pair) {
         vault = IVault(_vault);
-        // todo
         pair = IPancakePair(vault.want());
-
         require(pair.factory() == router.factory(), "Incompatible liquidity pair factory");
     }
 

@@ -9,7 +9,9 @@ import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/utils/Address.sol";
 
 import "./libraries/FixedPointMathLib.sol";
+
 import "./interfaces/IWETH.sol";
+import "./interfaces/IStrategy.sol";
 
 contract Vault is ERC20, Ownable, ReentrancyGuard {
     using Address for address payable;
@@ -17,6 +19,7 @@ contract Vault is ERC20, Ownable, ReentrancyGuard {
     using SafeERC20 for IERC20;
     
     IERC20 public asset;
+    IStrategy public strategy;
 
     event Deposit(address indexed _caller, uint256 _amount, uint256 _shares);
     event Withdraw(
@@ -28,9 +31,15 @@ contract Vault is ERC20, Ownable, ReentrancyGuard {
     constructor(
         IERC20 _asset,
         string memory _name,
-        string memory _symbol
+        string memory _symbol,
+        IStrategy _strategy
     ) ERC20(_name, _symbol) {
         asset = _asset;
+        strategy = _strategy;
+    }
+
+    function want() public view returns (IERC20) {
+        return IERC20(strategy.want());
     }
 
     function depositETH() external payable returns (uint256) {
@@ -56,13 +65,10 @@ contract Vault is ERC20, Ownable, ReentrancyGuard {
 
         emit Deposit(msg.sender, _amount, shares);
 
-        // afterDeposit(_amount, shares);
     }
 
     function withdraw(uint256 _shares) public nonReentrant returns (uint256 amount) {
         require((amount = previewWithdraw(_shares)) != 0, "ZERO_ASSETS");
-
-        // beforeWithdraw(amount, _shares);
         
         _burn(msg.sender, _shares);
 
@@ -91,8 +97,4 @@ contract Vault is ERC20, Ownable, ReentrancyGuard {
         uint256 supply = totalSupply(); // Saves an extra SLOAD if totalSupply is non-zero.
         return supply == 0 ? _shares : _shares.mulDivDown(totalAssets(), supply);
     }
-
-    function beforeWithdraw(uint256 _amount, uint256 _shares) internal {}
-
-    function afterDeposit(uint256 _amount, uint256 _shares) internal {}
 }
