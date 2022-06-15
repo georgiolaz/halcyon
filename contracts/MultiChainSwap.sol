@@ -9,7 +9,7 @@ import "./interfaces/external/ZetaReceiver.sol";
 
 import "./interfaces/external/MultiChainSwapErrors.sol";
 
-contract CrossChainSwap is ZetaInteractor, ZetaReceiver, MultiChainSwapErrors {
+contract MultiChainSwap is ZetaInteractor, ZetaReceiver, MultiChainSwapErrors {
     uint16 internal constant MAX_DEADLINE = 365;
     bytes32 public constant CROSS_CHAIN_SWAP_MESSAGE = keccak256("CROSS_CHAIN_SWAP");
 
