@@ -55,7 +55,7 @@ contract MultiChainSwapZetaConnector is ZetaConnector {
 
     function send(ZetaInterfaces.SendInput calldata sendInput) external override {
         uint256 originChainId = sendInput.destinationChainId == 2 ? 1 : 2;
-        address dest = address(uint160(bytes20(sendInput.destinationAddress)));
+        address dest = bytesToAddress(sendInput.destinationAddress);
 
         if (sendInput.zetaAmount > 0) {
             bool success = IERC20(zetaToken).transferFrom(msg.sender, dest, sendInput.zetaAmount);
@@ -70,5 +70,11 @@ contract MultiChainSwapZetaConnector is ZetaConnector {
                 sendInput.zetaAmount,
                 sendInput.message
             );
+    }
+
+    function bytesToAddress(bytes memory data) private pure returns (address addr) {
+        assembly {
+            addr := mload(add(data,20))
+        } 
     }
 }
