@@ -53,7 +53,7 @@ contract MultiChainSwapZetaConnector is ZetaConnector {
             );
     }
 
-    function send(ZetaInterfaces.SendInput calldata sendInput) external {
+    function send(ZetaInterfaces.SendInput calldata sendInput) external override {
         uint256 originChainId = sendInput.destinationChainId == 2 ? 1 : 2;
         address dest = address(uint160(bytes20(sendInput.destinationAddress)));
 
