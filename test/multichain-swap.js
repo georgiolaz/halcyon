@@ -1,13 +1,20 @@
 const { expect } = require("chai");
 const { ethers } = require("hardhat");
+const { AddressZero, MaxUint256 } = require("@ethersproject/constants");
+const { parseUnits } = require("@ethersproject/units");
 
 describe("MultiChainSwap", function () {
+  let multiChainSwap, zetaMock;
+  let deployer, account1;
+
   before(async () => {
+    [deployer, account1] = await ethers.getSigners();
+
     const router = "0x10ED43C718714eb63d5aA57B78B54704E256024E";
     const wBNB = "0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c";
 
     const ZetaMock = await ethers.getContractFactory("ZetaEthMock");
-    const zetaMock = await ZetaMock.deploy("10000000");
+    zetaMock = await ZetaMock.deploy("10000000");
     await zetaMock.deployed();
 
     const ZetaConnector = await ethers.getContractFactory("MultiChainSwapZetaConnector");
@@ -15,7 +22,7 @@ describe("MultiChainSwap", function () {
     await zetaConnector.deployed();
 
     const MultiChainSwap = await ethers.getContractFactory("MultiChainSwap");
-    const multiChainSwap = await MultiChainSwap.deploy(
+    multiChainSwap = await MultiChainSwap.deploy(
         zetaConnector.address, 
         zetaMock.address,
         router
@@ -24,6 +31,21 @@ describe("MultiChainSwap", function () {
     console.log("MultiChainSwap deployed: ", multiChainSwap.address);
   });
 
-  it("swapETHForTokensCrossChain", async function () {
+  describe("swapETHForTokensCrossChain", () => {
+    it("Should revert if the destinationChainId is not in the storage", async () => {
+      await expect(
+        multiChainSwap.swapETHForTokensCrossChain(
+          ethers.utils.solidityPack(["address"], [account1.address]),
+          zetaMock.address,
+          false,
+          0,
+          10,
+          MaxUint256,
+          {
+            value: parseUnits("1"),
+          }
+        )
+      ).to.be.revertedWith("InvalidDestinationChainId");
+    });
   });
 });
