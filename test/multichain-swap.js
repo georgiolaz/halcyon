@@ -6,6 +6,7 @@ const { BigNumber } = require("@ethersproject/bignumber");
 
 describe("MultiChainSwap", function () {
   let multiChainSwapA, multiChainSwapB, zetaMock, pancakeswapRouter, USDCTokenContract;
+  let zetaConnector;
   let deployer, account1;
   let WETH;
 
@@ -73,7 +74,7 @@ describe("MultiChainSwap", function () {
     await zetaMock.deployed();
 
     const ZetaConnector = await ethers.getContractFactory("MultiChainSwapZetaConnector");
-    const zetaConnector = await ZetaConnector.deploy(zetaMock.address);
+    zetaConnector = await ZetaConnector.deploy(zetaMock.address);
     await zetaConnector.deployed();
 
     const MultiChainSwap = await ethers.getContractFactory("MultiChainSwap");
@@ -164,7 +165,7 @@ describe("MultiChainSwap", function () {
       const tx3 = await USDCTokenContract.approve(multiChainSwapA.address, ZETA_USDC_PRICE);
       await tx3.wait();
 
-      /* const tx2 = await multiChainSwapA.swapTokensForTokensCrossChain(
+      const tx2 = await multiChainSwapA.swapTokensForTokensCrossChain(
         zetaMock.address,
         ZETA_USDC_PRICE,
         ethers.utils.solidityPack(["address"], [account1.address]),
@@ -175,7 +176,7 @@ describe("MultiChainSwap", function () {
         MaxUint256
       );
 
-      const result = await tx2.wait(); */
+      const result = await tx2.wait();
     });
 
     it("Should trade the input token for Zeta", async () => {
@@ -192,7 +193,7 @@ describe("MultiChainSwap", function () {
       const tx3 = await USDCTokenContract.approve(multiChainSwapA.address, ZETA_USDC_PRICE);
       await tx3.wait();
 
-      /* const tx2 = await multiChainSwapA.swapTokensForTokensCrossChain(
+      const tx2 = await multiChainSwapA.swapTokensForTokensCrossChain(
         USDC_ADDR,
         ZETA_USDC_PRICE,
         ethers.utils.solidityPack(["address"], [account1.address]),
@@ -201,11 +202,148 @@ describe("MultiChainSwap", function () {
         0,
         chainBId,
         MaxUint256
-      ); */
+      );
 
       /* const result = await tx2.wait();
       const eventNames = parseUniswapLog(result.logs);
       expect(eventNames.filter((e) => e === "Swap")).to.have.lengthOf(2); */
+    });
+
+    it("Should trade zeta for the output token", async () => {
+      await addZetaEthLiquidity();
+      await swapZetaToUSDC(deployer, parseUnits("10"));
+
+      expect(await zetaMock.balanceOf(account1.address)).to.be.eq(0);
+
+      const ZETA_TO_TRANSFER = parseUnits("1");
+
+      const tx1 = await zetaMock.approve(multiChainSwapA.address, ZETA_TO_TRANSFER);
+      await tx1.wait();
+
+      const tx3 = await USDCTokenContract.approve(multiChainSwapA.address, ZETA_USDC_PRICE);
+      await tx3.wait();
+
+      const tx2 = await multiChainSwapA.swapTokensForTokensCrossChain(
+        zetaMock.address,
+        ZETA_USDC_PRICE,
+        ethers.utils.solidityPack(["address"], [account1.address]),
+        USDC_ADDR,
+        false,
+        0,
+        chainBId,
+        MaxUint256
+      );
+
+      const result = await tx2.wait();
+      /* const eventNames = parseUniswapLog(result.logs);
+      expect(eventNames.filter((e) => e === "Swap")).to.have.lengthOf(2); */
+    });
+
+    it("Should trade input token for zeta and zeta for the output token", async () => {
+      await addZetaEthLiquidity();
+      await swapZetaToUSDC(deployer, parseUnits("10"));
+
+      expect(await zetaMock.balanceOf(account1.address)).to.be.eq(0);
+
+      const ZETA_TO_TRANSFER = parseUnits("1");
+
+      const tx1 = await zetaMock.approve(multiChainSwapA.address, ZETA_TO_TRANSFER);
+      await tx1.wait();
+
+      const tx3 = await USDCTokenContract.approve(multiChainSwapA.address, ZETA_USDC_PRICE);
+      await tx3.wait();
+
+      const tx2 = await multiChainSwapA.swapTokensForTokensCrossChain(
+        USDC_ADDR,
+        ZETA_USDC_PRICE,
+        ethers.utils.solidityPack(["address"], [account1.address]),
+        USDC_ADDR,
+        false,
+        0,
+        chainBId,
+        MaxUint256
+      );
+
+      const result = await tx2.wait();
+      /* const eventNames = parseUniswapLog(result.logs);
+      expect(eventNames.filter((e) => e === "Swap")).to.have.lengthOf(4); */
+    });
+
+    it("Should emit a SentTokenSwap event", async () => {
+      await addZetaEthLiquidity();
+      await swapZetaToUSDC(deployer, parseUnits("10"));
+
+      const senderInitialZetaBalance = await zetaMock.balanceOf(deployer.address);
+      expect(await zetaMock.balanceOf(account1.address)).to.be.eq(0);
+
+      const ZETA_TO_TRANSFER = parseUnits("1");
+
+      const tx1 = await zetaMock.approve(multiChainSwapA.address, ZETA_TO_TRANSFER);
+      await tx1.wait();
+
+      const tx3 = await USDCTokenContract.approve(multiChainSwapA.address, ZETA_USDC_PRICE);
+      await tx3.wait();
+
+      const tx2 = await multiChainSwapA.swapTokensForTokensCrossChain(
+        USDC_ADDR,
+        ZETA_USDC_PRICE,
+        ethers.utils.solidityPack(["address"], [account1.address]),
+        USDC_ADDR,
+        false,
+        0,
+        chainBId,
+        MaxUint256
+      );
+
+      const result = await tx2.wait();
+      /* const eventNames = parseZetaLog(result.logs);
+
+      expect(eventNames.filter((e) => e === "Swapped")).to.have.lengthOf(1); */
+    });
+
+    it("Should revert if the destinationChainId is not in the storage", async () => {
+      const call = multiChainSwapA.swapTokensForTokensCrossChain(
+        USDC_ADDR,
+        ZETA_USDC_PRICE,
+        ethers.utils.solidityPack(["address"], [account1.address]),
+        USDC_ADDR,
+        false,
+        0,
+        chainBId + 5,
+        MaxUint256
+      );
+
+      await expect(call).to.be.revertedWith("InvalidDestinationChainId");
+    });
+
+    it("Should revert if the originInputToken isn't provided", async () => {
+      const call = multiChainSwapA.swapTokensForTokensCrossChain(
+        AddressZero,
+        ZETA_USDC_PRICE,
+        ethers.utils.solidityPack(["address"], [account1.address]),
+        USDC_ADDR,
+        false,
+        0,
+        chainBId,
+        MaxUint256
+      );
+
+      await expect(call).to.be.revertedWith("MissingOriginInputTokenAddress");
+    });
+
+    it("Should revert if the destinationOutToken isn't provided", async () => {
+      const call = multiChainSwapA.swapTokensForTokensCrossChain(
+        USDC_ADDR,
+        ZETA_USDC_PRICE,
+        ethers.utils.solidityPack(["address"], [account1.address]),
+        AddressZero,
+        false,
+        0,
+        chainBId,
+        MaxUint256
+      );
+
+      await expect(call).to.be.revertedWith("OutTokenInvariant");
     });
   });
 });
