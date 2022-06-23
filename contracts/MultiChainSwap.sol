@@ -232,7 +232,7 @@ contract MultiChainSwap is ZetaInteractor, ZetaReceiver, MultiChainSwapErrors {
 
         ) = abi.decode(zetaMessage.message, (bytes32, address, address, uint256, bytes, address, bool, uint256, bool));
 
-        address receiverAddress = abi.decode(receiverAddressEncoded, (address));
+        address receiverAddress = bytesToAddress(receiverAddressEncoded);
 
         if (messageType != CROSS_CHAIN_SWAP_MESSAGE) revert InvalidMessageType();
 
@@ -357,5 +357,11 @@ contract MultiChainSwap is ZetaInteractor, ZetaReceiver, MultiChainSwapErrors {
         }
 
         emit RevertedSwap(originSender, originInputToken, inputTokenAmount, inputTokenReturnedAmount);
+    }
+
+    function bytesToAddress(bytes memory data) private pure returns (address addr) {
+        assembly {
+            addr := mload(add(data,20))
+        } 
     }
 }
