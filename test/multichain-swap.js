@@ -4,7 +4,7 @@ const { AddressZero, MaxUint256 } = require("@ethersproject/constants");
 const { parseUnits } = require("@ethersproject/units");
 const { BigNumber } = require("@ethersproject/bignumber");
 
-describe("MultiChainSwap", function () {
+describe("MultiChainSwap Test Suite", function () {
   let multiChainSwapA, multiChainSwapB, zetaMock, pancakeswapRouter, USDCTokenContract;
   let zetaConnector;
   let deployer, account1;
@@ -14,6 +14,8 @@ describe("MultiChainSwap", function () {
   const chainBId = 2;
   const USDC_ADDR = "0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d";
   const ZETA_USDC_PRICE = BigNumber.from("1455462180");
+
+  const encoder = new ethers.utils.AbiCoder();
 
   const addZetaEthLiquidity = async () => {
     const tx1 = await zetaMock.approve(pancakeswapRouter.address, MaxUint256);
@@ -344,6 +346,109 @@ describe("MultiChainSwap", function () {
       );
 
       await expect(call).to.be.revertedWith("OutTokenInvariant");
+    });
+
+    it("Should emit a SentTokenSwap event", async () => {
+      await addZetaEthLiquidity();
+      await swapZetaToUSDC(deployer, parseUnits("10"));
+
+      const senderInitialZetaBalance = await zetaMock.balanceOf(deployer.address);
+      expect(await zetaMock.balanceOf(account1.address)).to.be.eq(0);
+
+      const ZETA_TO_TRANSFER = parseUnits("1");
+
+      const tx1 = await zetaMock.approve(multiChainSwapA.address, ZETA_TO_TRANSFER);
+      await tx1.wait();
+
+      const tx3 = await USDCTokenContract.approve(multiChainSwapA.address, ZETA_USDC_PRICE);
+      await tx3.wait();
+
+      const tx2 = await multiChainSwapA.swapTokensForTokensCrossChain(
+        USDC_ADDR,
+        ZETA_USDC_PRICE,
+        ethers.utils.solidityPack(["address"], [account1.address]),
+        USDC_ADDR,
+        false,
+        0,
+        chainBId,
+        MaxUint256
+      );
+
+      const result = await tx2.wait();
+      /* const eventNames = parseZetaLog(result.logs);
+
+      expect(eventNames.filter((e) => e === "Swapped")).to.have.lengthOf(1); */
+    });
+
+    it("Should revert if the destinationChainId is not in the storage", async () => {
+      const call = multiChainSwapA.swapTokensForTokensCrossChain(
+        USDC_ADDR,
+        ZETA_USDC_PRICE,
+        ethers.utils.solidityPack(["address"], [account1.address]),
+        USDC_ADDR,
+        false,
+        0,
+        chainBId + 5,
+        MaxUint256
+      );
+
+      await expect(call).to.be.revertedWith("InvalidDestinationChainId");
+    });
+
+    it("Should revert if the originInputToken isn't provided", async () => {
+      const call = multiChainSwapA.swapTokensForTokensCrossChain(
+        AddressZero,
+        ZETA_USDC_PRICE,
+        ethers.utils.solidityPack(["address"], [account1.address]),
+        USDC_ADDR,
+        false,
+        0,
+        chainBId,
+        MaxUint256
+      );
+
+      await expect(call).to.be.revertedWith("MissingOriginInputTokenAddress");
+    });
+
+    it("Should revert if the destinationOutToken isn't provided", async () => {
+      const call = multiChainSwapA.swapTokensForTokensCrossChain(
+        USDC_ADDR,
+        ZETA_USDC_PRICE,
+        ethers.utils.solidityPack(["address"], [account1.address]),
+        AddressZero,
+        false,
+        0,
+        chainBId,
+        MaxUint256
+      );
+
+      await expect(call).to.be.revertedWith("OutTokenInvariant");
+    });
+  });
+
+  describe("onZetaMessage", () => {
+    it("Should revert if the caller is not ZetaConnector", async () => {
+      await expect(
+        multiChainSwapA.onZetaMessage({
+          originSenderAddress: ethers.utils.solidityPack(["address"], [multiChainSwapA.address]),
+          originChainId: chainBId,
+          destinationAddress: multiChainSwapB.address,
+          zetaAmount: 0,
+          message: encoder.encode(["address"], [multiChainSwapA.address]),
+        })
+      ).to.be.revertedWith("InvalidCaller");
+    });
+
+    it("Should revert if the originSenderAddress it not in interactorsByChainId", async () => {
+      await expect(
+        zetaConnector.callOnZetaMessage(
+          ethers.utils.solidityPack(["address"], [multiChainSwapB.address]),
+          chainAId,
+          multiChainSwapB.address,
+          0,
+          encoder.encode(["address"], [multiChainSwapB.address])
+        )
+      ).to.be.revertedWith("InvalidZetaMessageCall");
     });
   });
 });
