@@ -4,6 +4,8 @@ const { AddressZero, MaxUint256 } = require("@ethersproject/constants");
 const { parseUnits } = require("@ethersproject/units");
 const { BigNumber } = require("@ethersproject/bignumber");
 
+const HARDHAT_CHAIN_ID = 1337;
+
 describe("MultiChainSwap Test Suite", function () {
   let multiChainSwapA, multiChainSwapB, zetaMock, pancakeswapRouter, USDCTokenContract;
   let zetaConnector;
@@ -449,6 +451,61 @@ describe("MultiChainSwap Test Suite", function () {
           encoder.encode(["address"], [multiChainSwapB.address])
         )
       ).to.be.revertedWith("InvalidZetaMessageCall");
+    });
+  });
+
+  describe("onZetaRevert", () => {
+    it("Should revert if the caller is not ZetaConnector", async () => {
+      await expect(
+        multiChainSwapA.onZetaRevert({
+          zetaTxSenderAddress: deployer.address,
+          sourceChainId: chainAId,
+          destinationAddress: ethers.utils.solidityPack(["address"], [multiChainSwapB.address]),
+          destinationChainId: chainBId,
+          zetaValueAndGas: 0,
+          message: encoder.encode(["address"], [multiChainSwapA.address]),
+        })
+      ).to.be.revertedWith("InvalidCaller");
+    });
+
+    it("Should trade the returned Zeta back for the input zeta token", async () => {
+      await addZetaEthLiquidity();
+      await swapZetaToUSDC(deployer, parseUnits("10"));
+
+      const tx1 = await zetaMock.transfer(multiChainSwapA.address, parseUnits("100"));
+      await tx1.wait();
+
+      const originAddressInitialZetaBalance = await zetaMock.balanceOf(deployer.address);
+
+      const message = encoder.encode(
+        ["bytes32", "address", "address", "uint256", "bytes", "address", "bool", "uint256", "bool"],
+        [
+          "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+          deployer.address,
+          zetaMock.address,
+          0,
+          "0xffffffff",
+          multiChainSwapA.address,
+          true,
+          0,
+          false,
+        ]
+      );
+
+      const tx2 = await zetaConnector.callOnZetaRevert(
+        multiChainSwapA.address,
+        HARDHAT_CHAIN_ID,
+        chainBId,
+        encoder.encode(["address"], [multiChainSwapB.address]),
+        10,
+        0,
+        message
+      );
+
+      await tx2.wait();
+
+      const originAddressFinalZetaBalance = await zetaMock.balanceOf(deployer.address);
+      expect(originAddressFinalZetaBalance).to.be.eq(originAddressInitialZetaBalance.add(10));
     });
   });
 });
