@@ -454,7 +454,7 @@ describe("MultiChainSwap Test Suite", function () {
     });
   });
 
-  describe("onZetaRevert", () => {
+  /* describe("onZetaRevert", () => {
     it("Should revert if the caller is not ZetaConnector", async () => {
       await expect(
         multiChainSwapA.onZetaRevert({
@@ -507,5 +507,5 @@ describe("MultiChainSwap Test Suite", function () {
       const originAddressFinalZetaBalance = await zetaMock.balanceOf(deployer.address);
       expect(originAddressFinalZetaBalance).to.be.eq(originAddressInitialZetaBalance.add(10));
     });
-  });
+  }); */
 });

@@ -95,6 +95,6 @@ contract Vault is ERC20, Ownable, ReentrancyGuard {
 
     function convertToAssets(uint256 _shares) public view virtual returns (uint256) {
         uint256 supply = totalSupply(); // Saves an extra SLOAD if totalSupply is non-zero.
-        return supply == 0 ? _shares : _shares.mulDivDown(totalAssets(), supply);
+        return supply == 0 ? _shares : _shares.mulDivUp(totalAssets(), supply);
     }
 }
